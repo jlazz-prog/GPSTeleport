@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 struct SetupScreen: View {
     @EnvironmentObject private var spoof: SpoofController
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var hasPairing = PairingStore.exists
     @State private var vpnLooksOn = LocalDevVPN.isConnected
@@ -49,11 +50,13 @@ struct SetupScreen: View {
                     }
                     DisclosureGroup("How do I get a pairing file?") {
                         Text("""
-                        On your PC, with the iPhone plugged in and unlocked:
-                        1. Download idevice_pair from github.com/jkcoxson/idevice_pair (Releases).
-                        2. Open it, select your iPhone, and generate an RPPairing file.
-                        3. Get the file onto your iPhone (iCloud Drive, email it to yourself, or the Apple Devices app → Files → GPS Teleport).
-                        4. Tap "Import pairing file…" above and pick it.
+                        On your PC:
+                        1. Install the free Apple Devices app from the Microsoft Store.
+                        2. Download GPSTeleport-Pairing.exe from the same GitHub release page as this app.
+                        3. Plug in your iPhone, unlock it, and run GPSTeleport-Pairing.exe. Tap Trust if your iPhone asks.
+                        4. Come back here: this step turns green by itself.
+
+                        If it can't copy the file in, it saves GPSTeleport-pairing.plist next to the .exe. Get that onto your iPhone and tap "Import pairing file…" above.
                         """)
                         .font(.caption)
                     }
@@ -92,6 +95,12 @@ struct SetupScreen: View {
             .onAppear {
                 spoof.requestLocationPermission()
                 hasPairing = PairingStore.exists
+            }
+            .onChange(of: scenePhase) { _, phase in
+                guard phase == .active else { return }
+                PairingStore.importFromDocumentsIfPresent()
+                hasPairing = PairingStore.exists
+                vpnLooksOn = LocalDevVPN.isConnected
             }
         }
     }

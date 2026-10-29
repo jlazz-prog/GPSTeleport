@@ -86,12 +86,47 @@ jobs:
           name: xcodebuild-log
           path: build/xcodebuild.log
 
+  pairing-tool:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: PairingTool
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            PairingTool/target
+          key: pairing-tool-${{ hashFiles('PairingTool/Cargo.toml', 'PairingTool/src/**') }}
+          restore-keys: pairing-tool-
+
+      - name: Build pairing tool
+        run: cargo build --release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GPSTeleport-Pairing-exe
+          path: PairingTool/target/release/GPSTeleport-Pairing.exe
+          retention-days: 30
+
+  release:
+    if: github.ref == 'refs/heads/main'
+    needs: [build, pairing-tool]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
       - name: Publish as latest release
-        if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete latest --yes --cleanup-tag || true
-          gh release create latest GPSTeleport.ipa \
+          gh release create latest GPSTeleport.ipa GPSTeleport-Pairing.exe \
             --title "Latest build" \
-            --notes "Built from ${GITHUB_SHA::7}. Install this .ipa with SideStore."
+            --notes "Built from ${GITHUB_SHA::7}. Install GPSTeleport.ipa with SideStore. Run GPSTeleport-Pairing.exe on your PC once, with the iPhone plugged in, to make the pairing file."

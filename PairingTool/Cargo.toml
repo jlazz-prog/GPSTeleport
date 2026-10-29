@@ -1,0 +1,28 @@
+[package]
+name = "gpsteleport-pairing"
+version = "1.0.0"
+edition = "2024"
+publish = false
+
+[[bin]]
+name = "GPSTeleport-Pairing"
+path = "src/main.rs"
+
+[dependencies]
+# https://github.com/jkcoxson/idevice (MIT), same version the iPhone app uses
+idevice = { version = "=0.1.68", default-features = false, features = [
+  "afc",
+  "house_arrest",
+  "installation_proxy",
+  "pair",
+  "remote_pairing",
+  "ring",
+  "usbmuxd",
+] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+uuid = { version = "1", features = ["v4"] }
+
+[profile.release]
+opt-level = "s"
+lto = "thin"
+strip = true

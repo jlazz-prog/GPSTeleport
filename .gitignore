@@ -8,4 +8,9 @@ Vendor/idevice/libidevice_ffi.a
 build/
 Payload/
 *.ipa
+
+# Pairing tool build output, and pairing files (they're private keys)
+PairingTool/target/
+*.exe
+GPSTeleport-pairing.plist
 .DS_Store

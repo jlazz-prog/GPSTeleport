@@ -4,6 +4,7 @@ import SwiftUI
 struct GPSTeleportApp: App {
     @StateObject private var spoof = SpoofController()
     @StateObject private var spots = SavedSpots()
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         PairingStore.importFromDocumentsIfPresent()
@@ -18,6 +19,10 @@ struct GPSTeleportApp: App {
                     // A pairing file shared into the app ("Open in GPS Teleport").
                     try? PairingStore.importFile(at: url)
                 }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // GPSTeleport-Pairing.exe may have dropped a file in while the app was in the background.
+            if phase == .active { PairingStore.importFromDocumentsIfPresent() }
         }
     }
 }

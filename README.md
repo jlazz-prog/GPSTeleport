@@ -9,13 +9,14 @@ It uses Apple's developer location-simulation service, the same one Xcode uses f
 - An iPhone with **Developer Mode** on (Settings → Privacy & Security → Developer Mode)
 - **LocalDevVPN** from the App Store
 - **SideStore**, to install the app and refresh it every 7 days
-- An **RPPairing file** for your iPhone, made once on a PC with [idevice_pair](https://github.com/jkcoxson/idevice_pair/releases)
+- A **pairing file** for your iPhone, made once on a Windows PC with `GPSTeleport-Pairing.exe` (needs the free **Apple Devices** app from the Microsoft Store)
 
 ## Install
 
 1. Download `GPSTeleport.ipa` from the [latest release](../../releases/tag/latest).
 2. Open it with SideStore and install it.
-3. Open GPS Teleport, go to **Setup**, import your pairing file and tap **Test connection**.
+3. On your PC, download `GPSTeleport-Pairing.exe` from the same release. Plug in your iPhone, unlock it, and run the tool. It makes the pairing file and copies it straight into GPS Teleport.
+4. Open GPS Teleport, go to **Setup** and tap **Test connection**.
 
 ## Use
 
@@ -31,4 +32,4 @@ It uses Apple's developer location-simulation service, the same one Xcode uses f
 
 ## Building
 
-GitHub Actions builds every push to `main`; see `.github/workflows/build.yml`. The workflow compiles idevice for iOS and generates the Xcode project with XcodeGen. It then builds an unsigned `.ipa`, which SideStore signs when it installs it.
+GitHub Actions builds every push to `main`; see `.github/workflows/build.yml`. The workflow compiles idevice for iOS and generates the Xcode project with XcodeGen. It then builds an unsigned `.ipa`, which SideStore signs when it installs it. A Windows job builds the pairing tool from `PairingTool/`.

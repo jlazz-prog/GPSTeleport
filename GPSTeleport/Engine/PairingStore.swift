@@ -59,7 +59,7 @@ enum PairingStore {
                 &handle
             )
         }
-        if let error = consume(ffiError, "That file isn't a valid RPPairing file. Make one with idevice_pair in RPPairing mode.") {
+        if let error = consume(ffiError, "That file isn't a valid pairing file. Make one by running GPSTeleport-Pairing.exe on your PC.") {
             throw error
         }
         rp_pairing_file_free(handle)
