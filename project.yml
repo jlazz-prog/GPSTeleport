@@ -1,0 +1,51 @@
+name: GPSTeleport
+options:
+  bundleIdPrefix: com.jlazzprog
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1"
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+targets:
+  GPSTeleport:
+    type: application
+    platform: iOS
+    sources:
+      - path: GPSTeleport
+        excludes:
+          - "**/Info.plist"
+      - path: Vendor/idevice/module.modulemap
+        buildPhase: none
+      - path: Vendor/idevice/idevice.h
+        buildPhase: none
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jlazzprog.gpsteleport
+        PRODUCT_NAME: GPSTeleport
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        INFOPLIST_FILE: GPSTeleport/Resources/Info.plist
+        GENERATE_INFOPLIST_FILE: false
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: ""
+        ENABLE_BITCODE: NO
+        SUPPORTS_MACCATALYST: NO
+        LIBRARY_SEARCH_PATHS:
+          - "$(inherited)"
+          - "$(PROJECT_DIR)/Vendor/idevice"
+        SWIFT_INCLUDE_PATHS: "$(PROJECT_DIR)/Vendor/idevice"
+        HEADER_SEARCH_PATHS: "$(PROJECT_DIR)/Vendor/idevice"
+        OTHER_LDFLAGS:
+          - "$(inherited)"
+          - "-lidevice_ffi"
+          - "-lc++"
+          - "-lz"
+          - "-framework"
+          - "Security"
+          - "-framework"
+          - "SystemConfiguration"
+          - "-framework"
+          - "CoreFoundation"

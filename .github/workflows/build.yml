@@ -1,0 +1,97 @@
+name: Build IPA
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  # Pinned release of https://github.com/jkcoxson/idevice (MIT)
+  IDEVICE_REF: v0.1.68
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Restore idevice build
+        id: idevice-cache
+        uses: actions/cache@v4
+        with:
+          path: idevice-build
+          key: idevice-${{ env.IDEVICE_REF }}-aarch64-apple-ios-v1
+
+      - name: Build idevice for iOS
+        if: steps.idevice-cache.outputs.cache-hit != 'true'
+        run: |
+          rustup target add aarch64-apple-ios
+          git clone --depth 1 --branch "$IDEVICE_REF" https://github.com/jkcoxson/idevice.git idevice-src
+          cd idevice-src/ffi
+          BINDGEN_EXTRA_CLANG_ARGS="--sysroot=$(xcrun --sdk iphoneos --show-sdk-path)" \
+            IPHONEOS_DEPLOYMENT_TARGET=17.0 \
+            cargo build --release --target aarch64-apple-ios
+          mkdir -p "$GITHUB_WORKSPACE/idevice-build"
+          cp idevice.h "$GITHUB_WORKSPACE/idevice-build/"
+          cp ../target/aarch64-apple-ios/release/libidevice_ffi.a "$GITHUB_WORKSPACE/idevice-build/"
+
+      - name: Add idevice to the project
+        run: cp idevice-build/idevice.h idevice-build/libidevice_ffi.a Vendor/idevice/
+
+      - name: Generate Xcode project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Build app
+        run: |
+          mkdir -p build
+          xcodebuild archive \
+            -project GPSTeleport.xcodeproj \
+            -scheme GPSTeleport \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/GPSTeleport.xcarchive \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            | tee build/xcodebuild.log | grep -E "error:|warning: unable|BUILD|ARCHIVE" || true
+          test -d build/GPSTeleport.xcarchive/Products/Applications/GPSTeleport.app
+
+      - name: Package IPA
+        run: |
+          mkdir -p Payload
+          cp -R build/GPSTeleport.xcarchive/Products/Applications/GPSTeleport.app Payload/
+          zip -qr GPSTeleport.ipa Payload
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: GPSTeleport-ipa
+          path: GPSTeleport.ipa
+          retention-days: 30
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: build/xcodebuild.log
+
+      - name: Publish as latest release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest GPSTeleport.ipa \
+            --title "Latest build" \
+            --notes "Built from ${GITHUB_SHA::7}. Install this .ipa with SideStore."
