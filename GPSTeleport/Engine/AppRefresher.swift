@@ -78,7 +78,7 @@ final class AppRefresher: ObservableObject {
             currentBundleID,
             Self.progressCallback,
             Self.codeCallback,
-            Unmanaged.passUnretainedValue(self).toOpaque(),
+            Unmanaged.passUnretained(self).toOpaque(),
             &signedPointer
         )
         try Self.throwIfError(error)
@@ -97,7 +97,7 @@ final class AppRefresher: ObservableObject {
                 handshake,
                 signedPath,
                 Self.progressCallback,
-                Unmanaged.passUnretainedValue(self).toOpaque()
+                Unmanaged.passUnretained(self).toOpaque()
             )
             try Self.throwIfError(error)
         }
