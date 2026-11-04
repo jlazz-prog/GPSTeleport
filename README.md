@@ -8,7 +8,7 @@ It uses Apple's developer location-simulation service, the same one Xcode uses f
 
 - An iPhone with **Developer Mode** on (Settings → Privacy & Security → Developer Mode)
 - **LocalDevVPN** from the App Store
-- **[iloader](https://github.com/nab138/iloader)** on a PC, to install the app. With a free Apple ID the app stops opening after 7 days, so you reinstall it with iloader each week
+- **[iloader](https://github.com/nab138/iloader)** on a PC, to install the app the first time. With a free Apple ID the app stops opening after 7 days, but it can refresh itself before then (see [Refresh](#refresh))
 - A **pairing file** for your iPhone, made once on a Windows PC with `GPSTeleport-Pairing.exe` (needs the free **Apple Devices** app from the Microsoft Store)
 
 ## Install
@@ -25,6 +25,15 @@ It uses Apple's developer location-simulation service, the same one Xcode uses f
 3. Tap **Stop** to go back to your real location.
 
 To simulate a drive, switch to **Drive** and pick a destination, then tap **Find route** and **Start driving**. The trip starts from your current location, or from a green flag if you tap **Start from pin**. You can pause it or change speed along the way, and when it finishes the location stays at the destination until you tap **Stop**.
+
+## Refresh
+
+GPS Teleport can give itself a new 7 days without a PC. Turn on LocalDevVPN, stop any spoofing, tap the **↻** button, sign in with the Apple ID you installed it with, and tap **Refresh now**. The app closes when it finishes.
+
+- **Reminders:** you get a notification 2 days, 1 day and 4 hours before it runs out.
+- **Automatic refresh:** turn on **Refresh automatically** before you refresh. This saves your password in the iPhone's Keychain. After that, opening the app with less than 3 days left refreshes it, as long as LocalDevVPN is on and you aren't spoofing. It can't run while the app is closed, so you still have to open it in time. If Apple asks for a 2FA code, refresh by hand.
+- **Sign-in:** this uses the `ani.iloader.app` anisette server, the one iloader uses by default, along with Apple's own servers.
+- **If it runs out:** the app won't open, so reinstall it with iloader.
 
 ## Limits
 

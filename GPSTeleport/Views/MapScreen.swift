@@ -4,6 +4,7 @@ import MapKit
 struct MapScreen: View {
     @EnvironmentObject private var spoof: SpoofController
     @EnvironmentObject private var spots: SavedSpots
+    @EnvironmentObject private var refresher: AppRefresher
 
     @State private var camera: MapCameraPosition = .userLocation(fallback: .automatic)
     @State private var pin: CLLocationCoordinate2D?
@@ -161,6 +162,8 @@ struct MapScreen: View {
 
     private var controlPanel: some View {
         VStack(spacing: 12) {
+            automaticRefreshBanner
+
             StatusBanner(status: spoof.status) { spoof.dismissError() }
 
             if !isDriving {
@@ -236,6 +239,37 @@ struct MapScreen: View {
     }
 
     @ViewBuilder
+    private var automaticRefreshBanner: some View {
+        if refresher.isAutomatic {
+            switch refresher.state {
+            case .working(let message):
+                HStack(spacing: 8) {
+                    ProgressView()
+                    VStack(alignment: .leading) {
+                        Text("Refreshing GPS Teleport").font(.subheadline.bold())
+                        Text("\(message) The app closes when it's done.").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                }
+            case .finished:
+                Label("Refreshed. Close GPS Teleport and open it again.", systemImage: "checkmark.circle.fill")
+                    .font(.subheadline)
+                    .foregroundStyle(.green)
+            case .failed:
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("Automatic refresh didn't work", systemImage: "exclamationmark.triangle.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(.orange)
+                    Button("Refresh by hand") { showRefresh = true }
+                        .font(.caption.bold())
+                }
+            case .idle, .needsCode:
+                EmptyView()
+            }
+        }
+    }
+
+    @ViewBuilder
     private var primaryButton: some View {
         if mode == .teleport {
             Button {
@@ -246,7 +280,7 @@ struct MapScreen: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(.purple)
-            .disabled(pin == nil || spoof.isBusy)
+            .disabled(pin == nil || spoof.isBusy || refresher.isRunning)
         } else if !isDriving {
             if let route {
                 Button {
@@ -258,7 +292,7 @@ struct MapScreen: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.purple)
-                .disabled(spoof.isBusy)
+                .disabled(spoof.isBusy || refresher.isRunning)
             } else {
                 Button(action: findRoute) {
                     Label(isFindingRoute ? "Finding route…" : "Find route", systemImage: "arrow.triangle.turn.up.right.diamond.fill")

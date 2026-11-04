@@ -4,9 +4,10 @@ struct RefreshScreen: View {
     @EnvironmentObject private var spoof: SpoofController
     @Environment(\.dismiss) private var dismiss
 
-    @StateObject private var refresher = AppRefresher()
-    @AppStorage("refreshAppleID") private var email = ""
+    @EnvironmentObject private var refresher: AppRefresher
+    @AppStorage(AppRefresher.emailKey) private var email = ""
     @State private var password = ""
+    @State private var refreshesAutomatically = SavedPassword.exists
     @State private var code = ""
     @State private var notificationsAllowed = true
 
@@ -38,10 +39,14 @@ struct RefreshScreen: View {
                         .autocorrectionDisabled()
                     SecureField("Password", text: $password)
                         .textContentType(.password)
+                    Toggle("Refresh automatically", isOn: $refreshesAutomatically)
+                        .onChange(of: refreshesAutomatically) {
+                            if !refreshesAutomatically { SavedPassword.delete() }
+                        }
                 } header: {
                     Text("Apple ID")
                 } footer: {
-                    Text("Use the Apple ID you installed GPS Teleport with. Your password isn't saved, and it's used only to sign in to Apple. Sign-in also uses the anisette server ani.iloader.app, the one iloader uses by default.")
+                    Text("Use the Apple ID you installed GPS Teleport with. Your password is used only to sign in to Apple, and sign-in also uses the anisette server ani.iloader.app, the one iloader uses by default.\n\nAutomatic refresh saves your password in this iPhone's Keychain. Once you've refreshed here with it on, opening the app with less than 3 days left refreshes it if LocalDevVPN is on and you aren't spoofing. The app closes when it finishes.")
                 }
 
                 Section {
@@ -83,6 +88,7 @@ struct RefreshScreen: View {
                 Text(codeMessage)
             }
             .task {
+                if password.isEmpty, let saved = SavedPassword.load() { password = saved }
                 notificationsAllowed = await AppExpiry.notificationsAllowed()
             }
         }
@@ -144,6 +150,11 @@ struct RefreshScreen: View {
     }
 
     private func start() {
+        if refreshesAutomatically {
+            SavedPassword.save(password)
+        } else {
+            SavedPassword.delete()
+        }
         refresher.refresh(email: email.trimmingCharacters(in: .whitespaces), password: password)
     }
 
