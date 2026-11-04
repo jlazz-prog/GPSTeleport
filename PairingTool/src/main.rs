@@ -61,7 +61,7 @@ async fn run() -> Result<(), String> {
         }
         Ok(false) => {
             println!("\nThe pairing file is made, but GPS Teleport isn't installed on this iPhone yet.");
-            println!("Install it with SideStore, then run this again and it'll be copied in for you.");
+            println!("Install it with iloader, then run this again and it'll be copied in for you.");
         }
         Err(e) => {
             println!("\nThe pairing file is made, but copying it into GPS Teleport failed ({e}).");
@@ -209,7 +209,7 @@ async fn install_into_app(provider: &UsbmuxdProvider, bytes: &[u8]) -> Result<bo
         .get_apps(Some("User"), None)
         .await
         .map_err(describe_error)?;
-    // SideStore adds a suffix to the bundle ID, so match on the prefix.
+    // Sideloading tools can add a suffix to the bundle ID, so match on the prefix.
     let Some(bundle_id) = apps.into_keys().find(|id| id.starts_with(APP_BUNDLE_PREFIX)) else {
         return Ok(false);
     };

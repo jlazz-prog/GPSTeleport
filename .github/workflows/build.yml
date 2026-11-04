@@ -129,4 +129,4 @@ jobs:
           gh release delete latest --yes --cleanup-tag || true
           gh release create latest GPSTeleport.ipa GPSTeleport-Pairing.exe \
             --title "Latest build" \
-            --notes "Built from ${GITHUB_SHA::7}. Install GPSTeleport.ipa with SideStore. Run GPSTeleport-Pairing.exe on your PC once, with the iPhone plugged in, to make the pairing file."
+            --notes "Built from ${GITHUB_SHA::7}. Install GPSTeleport.ipa with iloader. Run GPSTeleport-Pairing.exe on your PC once, with the iPhone plugged in, to make the pairing file."
