@@ -8,13 +8,13 @@ It uses Apple's developer location-simulation service, the same one Xcode uses f
 
 - An iPhone with **Developer Mode** on (Settings → Privacy & Security → Developer Mode)
 - **LocalDevVPN** from the App Store
-- **SideStore**, to install the app and refresh it every 7 days
+- **[iloader](https://github.com/nab138/iloader)** on a PC, to install the app. With a free Apple ID the app stops opening after 7 days, so you reinstall it with iloader each week
 - A **pairing file** for your iPhone, made once on a Windows PC with `GPSTeleport-Pairing.exe` (needs the free **Apple Devices** app from the Microsoft Store)
 
 ## Install
 
 1. Download `GPSTeleport.ipa` from the [latest release](../../releases/tag/latest).
-2. Open it with SideStore and install it.
+2. Plug in your iPhone and install the `.ipa` with iloader.
 3. On your PC, download `GPSTeleport-Pairing.exe` from the same release. Plug in your iPhone, unlock it, and run the tool. It makes the pairing file and copies it straight into GPS Teleport.
 4. Open GPS Teleport, go to **Setup** and tap **Test connection**.
 
@@ -24,12 +24,15 @@ It uses Apple's developer location-simulation service, the same one Xcode uses f
 2. Tap the map or search for a place, then tap **Spoof here**.
 3. Tap **Stop** to go back to your real location.
 
+To simulate a drive, switch to **Drive** and pick a destination, then tap **Find route** and **Start driving**. The trip starts from your current location, or from a green flag if you tap **Start from pin**. You can pause it or change speed along the way, and when it finishes the location stays at the destination until you tap **Stop**.
+
 ## Limits
 
 - The fake location stays on only while the app is running. A blue location pill shows it's active. Swiping the app away or restarting the phone switches back to your real location.
+- Drives send a position only. Motion sensors aren't simulated, so apps that use them to detect driving may not treat a simulated drive as a real one.
 - After a restart, the first teleport re-installs Apple's Developer Disk Image automatically. This takes a few seconds and needs internet.
 - A new pairing file is needed after an iOS update or a phone reset.
 
 ## Building
 
-GitHub Actions builds every push to `main`; see `.github/workflows/build.yml`. The workflow compiles idevice for iOS and generates the Xcode project with XcodeGen. It then builds an unsigned `.ipa`, which SideStore signs when it installs it. A Windows job builds the pairing tool from `PairingTool/`.
+GitHub Actions builds every push to `main`; see `.github/workflows/build.yml`. The workflow compiles idevice for iOS and generates the Xcode project with XcodeGen. It then builds an unsigned `.ipa`, which iloader signs when it installs it. A Windows job builds the pairing tool from `PairingTool/`.
