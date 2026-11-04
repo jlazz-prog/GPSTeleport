@@ -1,4 +1,5 @@
 module idevice [system] {
   header "idevice.h"
+  header "gpsrefresh.h"
   export *
 }

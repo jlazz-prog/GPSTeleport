@@ -22,28 +22,29 @@ jobs:
         with:
           xcode-version: latest-stable
 
-      - name: Restore idevice build
-        id: idevice-cache
+      - name: Restore Rust build
+        id: rust-cache
         uses: actions/cache@v4
         with:
-          path: idevice-build
-          key: idevice-${{ env.IDEVICE_REF }}-aarch64-apple-ios-v1
+          path: rust-build
+          key: gpscore-${{ env.IDEVICE_REF }}-aarch64-apple-ios-${{ hashFiles('RefreshCore/**') }}
 
-      - name: Build idevice for iOS
-        if: steps.idevice-cache.outputs.cache-hit != 'true'
+      - name: Build Rust code for iOS
+        if: steps.rust-cache.outputs.cache-hit != 'true'
         run: |
+          rustup update stable
           rustup target add aarch64-apple-ios
           git clone --depth 1 --branch "$IDEVICE_REF" https://github.com/jkcoxson/idevice.git idevice-src
-          cd idevice-src/ffi
+          cd RefreshCore
           BINDGEN_EXTRA_CLANG_ARGS="--sysroot=$(xcrun --sdk iphoneos --show-sdk-path)" \
             IPHONEOS_DEPLOYMENT_TARGET=17.0 \
             cargo build --release --target aarch64-apple-ios
-          mkdir -p "$GITHUB_WORKSPACE/idevice-build"
-          cp idevice.h "$GITHUB_WORKSPACE/idevice-build/"
-          cp ../target/aarch64-apple-ios/release/libidevice_ffi.a "$GITHUB_WORKSPACE/idevice-build/"
+          mkdir -p "$GITHUB_WORKSPACE/rust-build"
+          cp ../idevice-src/ffi/idevice.h "$GITHUB_WORKSPACE/rust-build/"
+          cp target/aarch64-apple-ios/release/libgpscore.a "$GITHUB_WORKSPACE/rust-build/"
 
-      - name: Add idevice to the project
-        run: cp idevice-build/idevice.h idevice-build/libidevice_ffi.a Vendor/idevice/
+      - name: Add Rust code to the project
+        run: cp rust-build/idevice.h rust-build/libgpscore.a Vendor/idevice/
 
       - name: Generate Xcode project
         run: |

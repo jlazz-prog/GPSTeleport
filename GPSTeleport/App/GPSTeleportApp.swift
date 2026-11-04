@@ -22,7 +22,10 @@ struct GPSTeleportApp: App {
         }
         .onChange(of: scenePhase) { _, phase in
             // GPSTeleport-Pairing.exe may have dropped a file in while the app was in the background.
-            if phase == .active { PairingStore.importFromDocumentsIfPresent() }
+            if phase == .active {
+                PairingStore.importFromDocumentsIfPresent()
+                Task { await AppExpiry.scheduleReminders() }
+            }
         }
     }
 }

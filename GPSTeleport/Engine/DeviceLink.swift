@@ -62,6 +62,22 @@ final class DeviceLink {
         }
     }
 
+    /// Opens a tunnel only for `work`, closing any session already open. Other calls wait.
+    func withDeveloperTunnel<T>(_ work: (OpaquePointer, OpaquePointer) throws -> T) throws -> T {
+        try queue.sync {
+            disconnectLocked()
+            guard PairingStore.exists else {
+                throw DeviceError(message: "No pairing file yet. Import one in Setup first.")
+            }
+            try openTunnelLocked()
+            defer { disconnectLocked() }
+            guard let adapter, let handshake else {
+                throw DeviceError(message: "Couldn't connect to your iPhone. Make sure LocalDevVPN is connected.")
+            }
+            return try work(adapter, handshake)
+        }
+    }
+
     // MARK: - Connection (queue only)
 
     private func connectLocked(progress: (String) -> Void) throws {

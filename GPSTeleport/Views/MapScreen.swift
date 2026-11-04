@@ -10,6 +10,7 @@ struct MapScreen: View {
     @State private var searchText = ""
     @State private var searchResults: [MKMapItem] = []
     @State private var showSetup = false
+    @State private var showRefresh = false
     @State private var showSpots = false
     @State private var showSaveSpot = false
     @State private var newSpotName = ""
@@ -105,10 +106,18 @@ struct MapScreen: View {
                     Button { showSpots = true } label: { Image(systemName: "star") }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
+                    Button { showRefresh = true } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .foregroundStyle(AppExpiry.isExpiringSoon ? Color.orange : Color.accentColor)
+                    }
+                    .accessibilityLabel("Refresh")
+                }
+                ToolbarItem(placement: .topBarTrailing) {
                     Button { showSetup = true } label: { Image(systemName: "gearshape") }
                 }
             }
             .sheet(isPresented: $showSetup) { SetupScreen() }
+            .sheet(isPresented: $showRefresh) { RefreshScreen() }
             .sheet(isPresented: $showSpots) {
                 SavedSpotsScreen { spot in
                     select(spot.coordinate)

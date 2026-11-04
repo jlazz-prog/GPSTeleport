@@ -1,0 +1,28 @@
+# The Rust code linked into GPS Teleport: idevice's C API plus the in-app refresher.
+# CI clones idevice to ../idevice-src at the tag in .github/workflows/build.yml.
+[package]
+name = "gpscore"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+idevice-ffi = { path = "../idevice-src/ffi", default-features = false, features = ["full", "ring"] }
+idevice = { path = "../idevice-src/idevice", default-features = false, features = ["ring"] }
+isideload = { version = "=0.5.2", default-features = false, features = ["install", "tokio-mt", "fs-storage"] }
+libc = "0.2"
+rootcause = "0.12"
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
+tokio = { version = "1", features = ["rt-multi-thread", "time", "net", "io-util", "sync"] }
+
+# isideload asks for idevice from crates.io. Using the same copy as idevice-ffi keeps
+# the tunnel handles the app opens compatible with isideload's install code.
+[patch.crates-io]
+idevice = { path = "../idevice-src/idevice" }
+
+[profile.release]
+strip = "debuginfo"
