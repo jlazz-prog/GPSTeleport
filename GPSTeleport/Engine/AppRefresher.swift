@@ -53,7 +53,9 @@ final class AppRefresher: ObservableObject {
     /// Call on the main thread.
     func refreshAutomaticallyIfNeeded(isSpoofing: @escaping @MainActor () -> Bool) {
         let defaults = UserDefaults.standard
+        // The tunnel check below closes any open session, so it can't run during a spoof.
         guard !isRunning, !isCheckingAutomatic,
+              !MainActor.assumeIsolated({ isSpoofing() }),
               let expiry = AppExpiry.date
         else { return }
 

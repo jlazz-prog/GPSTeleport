@@ -12,6 +12,8 @@ final class DeviceLink {
     /// The address LocalDevVPN routes back to this phone.
     static let tunnelIP = "10.7.0.1"
 
+    private static let lastPortKey = "remotePairingLastPort"
+
     private let queue = DispatchQueue(label: "com.jlazzprog.gpsteleport.device")
     private var adapter: OpaquePointer?
     private var handshake: OpaquePointer?
@@ -39,6 +41,31 @@ final class DeviceLink {
                                    "Connected, but setting the location failed.") {
                 disconnectLocked()
                 throw error
+            }
+        }
+    }
+
+    /// True when a location session is open. It may still turn out to have dropped.
+    var hasOpenSession: Bool {
+        queue.sync { locationSimulation != nil }
+    }
+
+    /// Repeats `work` while the iPhone refuses the connection, giving the user time to
+    /// turn cellular data off. Any other error stops it straight away.
+    static func retryWhileUnreachable(timeout: TimeInterval, _ work: () throws -> Void) throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while true {
+            do {
+                return try work()
+            } catch let error as DeviceError where error.isUnreachable {
+                guard Date() < deadline else {
+                    throw DeviceError(
+                        message: "Couldn't connect. Turn off Cellular Data in Control Center, check that LocalDevVPN is connected, and try again.",
+                        detail: error.detail,
+                        isUnreachable: true
+                    )
+                }
+                Thread.sleep(forTimeInterval: 1)
             }
         }
     }
@@ -87,7 +114,8 @@ final class DeviceLink {
             throw DeviceError(message: "No pairing file yet. Import one in Setup first.")
         }
 
-        progress("Connecting through LocalDevVPN…")
+        // No progress message here: without Wi-Fi this repeats, and the request to turn
+        // cellular data off has to stay on screen.
         try openTunnelLocked()
 
         progress("Opening location service…")
@@ -111,7 +139,26 @@ final class DeviceLink {
         }
     }
 
+    /// Tries the port that worked last time first, because Bonjour takes seconds at best
+    /// and connecting without Wi-Fi retries this until cellular data is off.
     private func openTunnelLocked() throws {
+        let defaults = UserDefaults.standard
+        let savedPort = defaults.integer(forKey: Self.lastPortKey)
+        if (1...65535).contains(savedPort) {
+            do {
+                try openTunnelLocked(port: UInt16(savedPort))
+                return
+            } catch let error as DeviceError where error.isUnreachable {
+                // The port can change after a restart, so look it up below.
+            }
+        }
+
+        let port = RemotePairingPort.resolve()
+        try openTunnelLocked(port: port)
+        defaults.set(Int(port), forKey: Self.lastPortKey)
+    }
+
+    private func openTunnelLocked(port: UInt16) throws {
         var pairing: OpaquePointer?
         let pairingPath = PairingStore.url.path
         if let error = consume(rp_pairing_file_read(pairingPath, &pairing),
@@ -122,7 +169,7 @@ final class DeviceLink {
 
         var address = sockaddr_in()
         address.sin_family = sa_family_t(AF_INET)
-        address.sin_port = in_port_t(RemotePairingPort.resolve()).bigEndian
+        address.sin_port = in_port_t(port).bigEndian
         _ = Self.tunnelIP.withCString { inet_pton(AF_INET, $0, &address.sin_addr) }
 
         let ffiError = withUnsafePointer(to: &address) { pointer in
@@ -139,7 +186,8 @@ final class DeviceLink {
                 )
             }
         }
-        if let error = consume(ffiError, "Couldn't connect to your iPhone. Make sure LocalDevVPN is connected and you're on Wi-Fi.") {
+        if var error = consume(ffiError, "Couldn't connect to your iPhone. Make sure LocalDevVPN is connected. If you're not on Wi-Fi, turn off Cellular Data while it connects.") {
+            error.isUnreachable = true
             disconnectLocked()
             throw error
         }

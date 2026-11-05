@@ -58,6 +58,10 @@ final class SpoofController: ObservableObject {
     private var isPaused = false
     private var isReconnecting = false
 
+    /// Sends that have failed in a row. Without Wi-Fi a lost connection can't come back by itself.
+    private var failedSends = 0
+    private let maxFailedSendsWithoutWiFi = 3
+
     /// True while the phone is reporting a spoofed location.
     var isActive: Bool {
         switch status {
@@ -144,18 +148,41 @@ final class SpoofController: ObservableObject {
     // MARK: - Connecting
 
     private func connect(to coordinate: CLLocationCoordinate2D, then onConnected: @escaping @MainActor () -> Void) {
+        let onWiFi = CellularLink.isOnWiFi
         status = .working("Connecting…")
         keepAlive.start()
+        failedSends = 0
 
         sendQueue.async {
             do {
-                try DeviceLink.shared.setLocation(latitude: coordinate.latitude, longitude: coordinate.longitude) { message in
-                    DispatchQueue.main.async { [weak self] in
-                        if self?.isBusy == true { self?.status = .working(message) }
+                let setLocation = {
+                    try DeviceLink.shared.setLocation(latitude: coordinate.latitude, longitude: coordinate.longitude) { message in
+                        DispatchQueue.main.async { [weak self] in
+                            if self?.isBusy == true { self?.status = .working(message) }
+                        }
                     }
                 }
-                DispatchQueue.main.async {
-                    MainActor.assumeIsolated { onConnected() }
+                // An open session takes a new location with cellular data on, so only ask
+                // for data to go off when a new connection is needed.
+                var neededNewConnection = false
+                if onWiFi {
+                    try setLocation()
+                } else if !DeviceLink.shared.hasOpenSession || (try? setLocation()) == nil {
+                    neededNewConnection = true
+                    DispatchQueue.main.async { [weak self] in
+                        if self?.isBusy == true { self?.status = .working(CellularLink.turnOffMessage) }
+                    }
+                    try DeviceLink.retryWhileUnreachable(timeout: CellularLink.connectTimeout, setLocation)
+                }
+                let remind = neededNewConnection
+                DispatchQueue.main.async { [weak self] in
+                    MainActor.assumeIsolated {
+                        if remind {
+                            self?.remindToTurnCellularOn(then: onConnected)
+                        } else {
+                            onConnected()
+                        }
+                    }
                 }
             } catch {
                 DispatchQueue.main.async { [weak self] in
@@ -163,6 +190,26 @@ final class SpoofController: ObservableObject {
                 }
             }
         }
+    }
+
+    /// The location is already set here. This only leaves the reminder up long enough to read.
+    private func remindToTurnCellularOn(then onConnected: @escaping @MainActor () -> Void) {
+        status = .working(CellularLink.turnOnMessage)
+        DispatchQueue.main.asyncAfter(deadline: .now() + CellularLink.turnOnMessageSeconds) {
+            MainActor.assumeIsolated { onConnected() }
+        }
+    }
+
+    /// Ends the spoof when the connection is gone for good, so the app doesn't keep
+    /// showing a location the phone is no longer reporting.
+    private func noteSendResult(succeeded: Bool) {
+        guard !succeeded else {
+            failedSends = 0
+            return
+        }
+        failedSends += 1
+        guard isActive, failedSends >= maxFailedSendsWithoutWiFi, !CellularLink.isOnWiFi else { return }
+        fail(DeviceError(message: "The connection closed, so your real location is showing again. To spoof again, tap the button and turn off Cellular Data when asked."))
     }
 
     private func fail(_ error: Error) {
@@ -186,7 +233,9 @@ final class SpoofController: ObservableObject {
     private func refreshTarget() {
         guard let target else { return }
         // Failures here are retried on the next tick; the session reconnects itself.
-        send(target, onResult: { _ in })
+        send(target) { [weak self] succeeded in
+            self?.noteSendResult(succeeded: succeeded)
+        }
     }
 
     // MARK: - Driving
@@ -216,6 +265,7 @@ final class SpoofController: ObservableObject {
         send(route.coordinate) { [weak self] succeeded in
             self?.isReconnecting = !succeeded
             self?.publishDriveProgress()
+            self?.noteSendResult(succeeded: succeeded)
         }
 
         if route.isFinished {

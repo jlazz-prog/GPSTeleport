@@ -36,7 +36,7 @@ enum DeveloperDiskImage {
         defer { cryptex1_assets_free(assets) }
 
         if let error = consume(cryptexd_install_ddi(adapter, handshake, assets, nil),
-                               "Couldn't install the Developer Disk Image. Check that Developer Mode is on and you're online.") {
+                               "Couldn't install the Developer Disk Image. Check that Developer Mode is on and you're on Wi-Fi. The first connection after a restart needs Wi-Fi, because this step needs internet.") {
             throw error
         }
     }
@@ -88,7 +88,7 @@ enum DeveloperDiskImage {
         task.resume()
         done.wait()
         if let failure {
-            throw DeviceError(message: "Couldn't download the Developer Disk Image. Check your internet connection.",
+            throw DeviceError(message: "Couldn't download the Developer Disk Image. Connect to Wi-Fi and try again. The first connection after a restart needs Wi-Fi, because this step needs internet.",
                               detail: failure.localizedDescription)
         }
     }

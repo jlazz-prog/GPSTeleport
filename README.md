@@ -26,6 +26,19 @@ It uses Apple's developer location-simulation service, the same one Xcode uses f
 
 To simulate a drive, switch to **Drive** and pick a destination, then tap **Find route** and **Start driving**. The trip starts from your current location, or from a green flag if you tap **Start from pin**. You can pause it or change speed along the way, and when it finishes the location stays at the destination until you tap **Stop**.
 
+## Use without Wi-Fi
+
+iOS blocks the connection this app needs while cellular data is on, even through LocalDevVPN, but allows it while data is off. Apps can't switch cellular data, so GPS Teleport asks you to do it:
+
+1. Turn on LocalDevVPN, then tap **Spoof here**.
+2. When the app asks, turn off **Cellular Data** in Control Center. The app connects by itself.
+3. When it says the location is set, turn **Cellular Data** back on.
+
+- You don't need to do this for every move. While the connection stays open, moving to a new spot works with data on.
+- If the connection closes, the spoof ends and the app tells you, so you can start again.
+- After a restart, the first connection needs Wi-Fi, because installing Apple's Developer Disk Image needs internet.
+- [Refresh](#refresh) still needs Wi-Fi.
+
 ## Refresh
 
 GPS Teleport can give itself a new 7 days without a PC. Turn on LocalDevVPN, stop any spoofing, tap the **↻** button, sign in with the Apple ID you installed it with, and tap **Refresh now**. The app closes when it finishes.

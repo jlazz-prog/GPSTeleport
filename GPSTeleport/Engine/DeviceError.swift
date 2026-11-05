@@ -5,6 +5,8 @@ import idevice
 struct DeviceError: LocalizedError {
     let message: String
     var detail: String?
+    /// True when the iPhone's developer service wouldn't take the connection.
+    var isUnreachable = false
 
     var errorDescription: String? {
         guard let detail, !detail.isEmpty else { return message }

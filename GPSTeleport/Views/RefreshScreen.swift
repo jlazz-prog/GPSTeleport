@@ -63,7 +63,7 @@ struct RefreshScreen: View {
 
                     statusView
                 } footer: {
-                    Text("Turn on LocalDevVPN first. GPS Teleport closes when it finishes, so just open it again.")
+                    Text("Turn on LocalDevVPN and connect to Wi-Fi first. GPS Teleport closes when it finishes, so just open it again.")
                 }
             }
             .navigationTitle("Refresh")

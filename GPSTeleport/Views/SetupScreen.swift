@@ -28,7 +28,7 @@ struct SetupScreen: View {
                     step(done: vpnLooksOn, title: "2. LocalDevVPN connected",
                          detail: vpnLooksOn
                             ? "Looks connected."
-                            : "Open LocalDevVPN and tap Connect. Be on Wi-Fi the first time you spoof.")
+                            : "Open LocalDevVPN and tap Connect. Be on Wi-Fi the first time you spoof after a restart.")
                     Button("Check again") { vpnLooksOn = LocalDevVPN.isConnected }
                 }
 
@@ -71,7 +71,8 @@ struct SetupScreen: View {
                     case .running(let message):
                         HStack { ProgressView(); Text(message).font(.caption) }
                     case .passed:
-                        Label("Connected. You're ready to teleport.", systemImage: "checkmark.circle.fill")
+                        Label(CellularLink.isOnWiFi ? "Connected. You're ready to teleport." : "Connected. If Cellular Data is off, turn it back on.",
+                              systemImage: "checkmark.circle.fill")
                             .foregroundStyle(.green)
                             .font(.caption)
                     case .failed(let message):
@@ -158,9 +159,17 @@ struct SetupScreen: View {
     private func runTest() {
         testState = .running("Starting…")
         DispatchQueue.global(qos: .userInitiated).async {
-            do {
+            let connect = {
                 try DeviceLink.shared.testConnection { message in
                     DispatchQueue.main.async { testState = .running(message) }
+                }
+            }
+            do {
+                if CellularLink.isOnWiFi || DeviceLink.shared.hasOpenSession {
+                    try connect()
+                } else {
+                    DispatchQueue.main.async { testState = .running(CellularLink.turnOffMessage) }
+                    try DeviceLink.retryWhileUnreachable(timeout: CellularLink.connectTimeout, connect)
                 }
                 DispatchQueue.main.async { testState = .passed }
             } catch {
