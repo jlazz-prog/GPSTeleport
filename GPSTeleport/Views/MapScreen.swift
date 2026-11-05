@@ -18,8 +18,10 @@ struct MapScreen: View {
 
     @State private var mode: Mode = .teleport
     @State private var routeStart: CLLocationCoordinate2D?
-    @State private var route: MKRoute?
+    @State private var route: PlannedRoute?
+    @State private var trafficNote: String?
     @State private var speed: DriveSpeed = .routePace
+    @AppStorage("customDriveMph") private var customMph = 50.0
     @State private var isFindingRoute = false
     @State private var routeError: String?
 
@@ -30,27 +32,32 @@ struct MapScreen: View {
     }
 
     private enum DriveSpeed: Hashable, CaseIterable, Identifiable {
-        case routePace, mph25, mph45, mph65, mph80
+        case routePace, mph25, mph35, mph45, mph65, mph80, custom
         var id: Self { self }
 
         var label: String {
             switch self {
             case .routePace: return "Auto"
             case .mph25: return "25"
+            case .mph35: return "35"
             case .mph45: return "45"
             case .mph65: return "65"
             case .mph80: return "80"
+            case .custom: return "Custom"
             }
         }
 
-        /// "Auto" matches the average pace of Apple Maps' travel time for the route.
-        func metersPerSecond(for route: MKRoute) -> Double {
+        /// "Auto" is the route's average pace. With live traffic that's only used on
+        /// stretches where Mapbox has no speed.
+        func metersPerSecond(for route: PlannedRoute, customMph: Double) -> Double {
             let metersPerSecondPerMph = 0.44704
             switch self {
+            case .custom: return customMph * metersPerSecondPerMph
             case .routePace:
                 guard route.expectedTravelTime > 0, route.distance > 0 else { return 40 * metersPerSecondPerMph }
                 return route.distance / route.expectedTravelTime
             case .mph25: return 25 * metersPerSecondPerMph
+            case .mph35: return 35 * metersPerSecondPerMph
             case .mph45: return 45 * metersPerSecondPerMph
             case .mph65: return 65 * metersPerSecondPerMph
             case .mph80: return 80 * metersPerSecondPerMph
@@ -64,7 +71,7 @@ struct MapScreen: View {
                 Map(position: $camera) {
                     UserAnnotation()
                     if let route {
-                        MapPolyline(route.polyline)
+                        MapPolyline(spoof.updatedRoute ?? route.polyline)
                             .stroke(.purple, lineWidth: 5)
                     }
                     if let routeStart {
@@ -238,6 +245,14 @@ struct MapScreen: View {
         return false
     }
 
+    /// True when the button would only repeat what's happening. With no pin, or a new pin
+    /// somewhere else, it still offers to move: a new pin means "Spoof here" is the next step.
+    private var isSpoofingAtPin: Bool {
+        guard case .active(let coordinate) = spoof.status else { return false }
+        guard let pin else { return true }
+        return pin.latitude == coordinate.latitude && pin.longitude == coordinate.longitude
+    }
+
     @ViewBuilder
     private var automaticRefreshBanner: some View {
         if refresher.isAutomatic {
@@ -275,17 +290,20 @@ struct MapScreen: View {
             Button {
                 if let pin { spoof.teleport(to: pin) }
             } label: {
-                Label("Spoof here", systemImage: "location.fill")
+                Label(isSpoofingAtPin ? "Spoofing" : "Spoof here",
+                      systemImage: isSpoofingAtPin ? "checkmark.circle.fill" : "location.fill")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
             .tint(.purple)
-            .disabled(pin == nil || spoof.isBusy || refresher.isRunning)
+            .disabled(pin == nil || isSpoofingAtPin || spoof.isBusy || refresher.isRunning)
         } else if !isDriving {
             if let route {
                 Button {
                     spoof.drive(along: route.polyline.coordinates,
-                                metersPerSecond: speed.metersPerSecond(for: route))
+                                trafficSpeeds: route.trafficSpeeds,
+                                metersPerSecond: speed.metersPerSecond(for: route, customMph: customMph),
+                                followTraffic: speed == .routePace)
                 } label: {
                     Label("Start driving", systemImage: "car.fill")
                         .frame(maxWidth: .infinity)
@@ -332,27 +350,68 @@ struct MapScreen: View {
 
             if let route {
                 if !isDriving {
-                    Text("\(Self.miles(route.distance)) · \(Self.duration(route.distance / speed.metersPerSecond(for: route)))")
+                    Text("\(Self.miles(route.distance)) · \(Self.duration(route.distance / speed.metersPerSecond(for: route, customMph: customMph)))")
                         .font(.footnote.bold())
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Speed (mph)").font(.caption).foregroundStyle(.secondary)
                     Picker("Speed (mph)", selection: $speed) {
-                        ForEach(DriveSpeed.allCases) { Text($0.label).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    .onChange(of: speed) {
-                        if isDriving {
-                            spoof.setDriveSpeed(metersPerSecond: speed.metersPerSecond(for: route))
+                        ForEach(DriveSpeed.allCases) { option in
+                            // Seven segments leave too little room for the word "Custom".
+                            if option == .custom {
+                                Image(systemName: "slider.horizontal.3")
+                                    .accessibilityLabel(option.label)
+                                    .tag(option)
+                            } else {
+                                Text(option.label).tag(option)
+                            }
                         }
                     }
+                    .pickerStyle(.segmented)
+                    .onChange(of: speed) { updateDriveSpeed(for: route) }
+
+                    if speed == .custom {
+                        HStack {
+                            Slider(value: $customMph, in: 1...100, step: 1)
+                                .accessibilityLabel("Custom speed")
+                                .accessibilityValue("\(Int(customMph)) miles per hour")
+                                .onChange(of: customMph) { updateDriveSpeed(for: route) }
+                            Text("\(Int(customMph)) mph")
+                                .font(.footnote.monospacedDigit())
+                                .frame(width: 58, alignment: .trailing)
+                        }
+                    }
+
+                    if route.trafficSpeeds != nil {
+                        if speed == .routePace {
+                            Label("Auto follows live traffic", systemImage: "car.2.fill")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        HStack(spacing: 8) {
+                            Link("© Mapbox", destination: URL(string: "https://www.mapbox.com/about/maps")!)
+                            Link("© OpenStreetMap", destination: URL(string: "https://www.openstreetmap.org/about")!)
+                        }
+                        .font(.caption2)
+                    }
                 }
+            }
+
+            if let trafficNote, route != nil {
+                Text("Using Apple's average speed. \(trafficNote)").font(.caption).foregroundStyle(.orange)
             }
 
             if let routeError {
                 Text(routeError).font(.caption).foregroundStyle(.orange)
             }
+        }
+    }
+
+    private func updateDriveSpeed(for route: PlannedRoute) {
+        if isDriving {
+            spoof.setDriveSpeed(metersPerSecond: speed.metersPerSecond(for: route, customMph: customMph),
+                                followTraffic: speed == .routePace)
         }
     }
 
@@ -381,33 +440,62 @@ struct MapScreen: View {
     private func clearRoute() {
         route = nil
         routeError = nil
+        trafficNote = nil
     }
 
+    /// Uses Mapbox's route with live traffic when there's a token. Otherwise, or if that
+    /// fails, it uses Apple Maps' route at one average speed.
     private func findRoute() {
         guard let pin else { return }
-        routeError = nil
+        clearRoute()
         isFindingRoute = true
+        let start = routeStart ?? spoof.spoofedCoordinate
 
+        guard LiveTraffic.hasToken else {
+            findAppleRoute(from: start, to: pin)
+            return
+        }
+        guard let origin = start ?? CLLocationManager().location?.coordinate else {
+            trafficNote = "Your current location isn't available yet."
+            findAppleRoute(from: start, to: pin)
+            return
+        }
+
+        Task { @MainActor in
+            do {
+                show(PlannedRoute(try await LiveTraffic.route(from: origin, to: pin)))
+            } catch {
+                trafficNote = error.localizedDescription
+                findAppleRoute(from: start, to: pin)
+            }
+        }
+    }
+
+    private func findAppleRoute(from start: CLLocationCoordinate2D?, to destination: CLLocationCoordinate2D) {
         let request = MKDirections.Request()
-        if let start = routeStart ?? spoof.spoofedCoordinate {
+        if let start {
             request.source = MKMapItem(placemark: MKPlacemark(coordinate: start))
         } else {
             request.source = MKMapItem.forCurrentLocation()
         }
-        request.destination = MKMapItem(placemark: MKPlacemark(coordinate: pin))
+        request.destination = MKMapItem(placemark: MKPlacemark(coordinate: destination))
         request.transportType = .automobile
 
         MKDirections(request: request).calculate { response, error in
-            isFindingRoute = false
             if let found = response?.routes.first {
-                route = found
-                camera = .rect(found.polyline.boundingMapRect.insetBy(
-                    dx: -found.polyline.boundingMapRect.width * 0.2,
-                    dy: -found.polyline.boundingMapRect.height * 0.2))
+                show(PlannedRoute(found))
             } else {
+                isFindingRoute = false
                 routeError = error?.localizedDescription ?? "Apple Maps couldn't find a driving route between those spots."
             }
         }
+    }
+
+    private func show(_ found: PlannedRoute) {
+        isFindingRoute = false
+        route = found
+        let bounds = found.polyline.boundingMapRect
+        camera = .rect(bounds.insetBy(dx: -bounds.width * 0.2, dy: -bounds.height * 0.2))
     }
 
     private func select(_ coordinate: CLLocationCoordinate2D) {
@@ -458,7 +546,8 @@ private struct StatusBanner: View {
                 } else if progress.isPaused {
                     label("Paused · \(MapScreen.remainingDescription(progress))", systemImage: "pause.circle.fill", color: .secondary)
                 } else {
-                    label("Driving · \(MapScreen.remainingDescription(progress))", systemImage: "car.fill", color: .green)
+                    label("\(Int((progress.metersPerSecond / 0.44704).rounded())) mph · \(MapScreen.remainingDescription(progress))",
+                          systemImage: progress.isFollowingTraffic ? "car.2.fill" : "car.fill", color: .green)
                 }
                 ProgressView(value: progress.fractionComplete).tint(.purple)
             }

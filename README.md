@@ -24,7 +24,16 @@ It uses Apple's developer location-simulation service, the same one Xcode uses f
 2. Tap the map or search for a place, then tap **Spoof here**.
 3. Tap **Stop** to go back to your real location.
 
-To simulate a drive, switch to **Drive** and pick a destination, then tap **Find route** and **Start driving**. The trip starts from your current location, or from a green flag if you tap **Start from pin**. You can pause it or change speed along the way, and when it finishes the location stays at the destination until you tap **Stop**.
+To simulate a drive, switch to **Drive** and pick a destination, then tap **Find route** and **Start driving**. The trip starts from your current location, or from a green flag if you tap **Start from pin**. You can pause it or change speed along the way, including a custom speed from 1 to 100 mph, and when it finishes the location stays at the destination until you tap **Stop**.
+
+### Live traffic
+
+Drive's **Auto** speed can follow real traffic, so the drive slows through a jam and speeds up after it. It's optional: without it, Auto uses Apple Maps' average speed for the whole route.
+
+1. Make a free account at [mapbox.com](https://www.mapbox.com) and copy your access token.
+2. In GPS Teleport, go to **Setup** and paste it under **Live traffic for Drive**. It's saved in this iPhone's Keychain.
+
+With a token, the drive follows Mapbox's route, which can differ from the one Apple Maps would pick. The speeds update every 5 minutes, which needs internet. Mapbox receives your start and destination, and your position at each update. Traffic may not exactly match what Google or Apple Maps show, and there are no red lights or stop-and-go.
 
 ## Use without Wi-Fi
 

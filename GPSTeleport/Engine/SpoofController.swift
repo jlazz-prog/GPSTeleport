@@ -1,5 +1,6 @@
 import Foundation
 import CoreLocation
+import MapKit
 
 /// App-facing state for spoofing: teleport, drive a route, keep alive, stop.
 @MainActor
@@ -10,6 +11,8 @@ final class SpoofController: ObservableObject {
         var fractionComplete: Double
         var remainingMeters: Double
         var remainingSeconds: Double
+        var metersPerSecond: Double
+        var isFollowingTraffic: Bool
         var isPaused: Bool
         var isReconnecting: Bool
 
@@ -38,6 +41,8 @@ final class SpoofController: ObservableObject {
     }
 
     @Published private(set) var status: Status = .off
+    /// The route being driven, when live traffic has replaced the one first planned.
+    @Published private(set) var updatedRoute: MKPolyline?
 
     /// How often a stationary location is re-sent. Re-sending keeps the session alive
     /// and reconnects automatically if the tunnel dropped.
@@ -53,7 +58,17 @@ final class SpoofController: ObservableObject {
     private let sendQueue = DispatchQueue(label: "com.jlazzprog.gpsteleport.send", qos: .userInitiated)
 
     private var playback: RoutePlayback?
+    /// The chosen speed, or the route's average when following traffic with no data for a stretch.
     private var metersPerSecond: Double = 0
+    private var isFollowingTraffic = false
+    /// The speed right now. It eases toward the target, because cars don't change speed instantly.
+    private var currentSpeed: Double = 0
+    private let maxSpeedChange = 2.5 // meters per second, each second
+    /// Identifies the current drive, so a slow traffic update can't change a later one.
+    private var driveID = UUID()
+    private var lastTrafficUpdate = Date()
+    private var isUpdatingTraffic = false
+    private let trafficUpdateInterval: TimeInterval = 300
     private var lastDriveTick = Date()
     private var isPaused = false
     private var isReconnecting = false
@@ -95,12 +110,18 @@ final class SpoofController: ObservableObject {
     }
 
     /// Moves along the route's points at the given speed, then stays at the end.
-    func drive(along points: [CLLocationCoordinate2D], metersPerSecond: Double) {
-        guard !isBusy, let route = RoutePlayback(points: points), metersPerSecond > 0 else { return }
+    func drive(along points: [CLLocationCoordinate2D], trafficSpeeds: [Double?]?,
+               metersPerSecond: Double, followTraffic: Bool) {
+        guard !isBusy, let route = RoutePlayback(points: points, speeds: trafficSpeeds), metersPerSecond > 0 else { return }
         stopTimer()
         target = nil
         playback = route
+        updatedRoute = nil
         self.metersPerSecond = metersPerSecond
+        isFollowingTraffic = followTraffic
+        currentSpeed = 0
+        driveID = UUID()
+        lastTrafficUpdate = Date()
         isPaused = false
         isReconnecting = false
 
@@ -109,9 +130,11 @@ final class SpoofController: ObservableObject {
         }
     }
 
-    func setDriveSpeed(metersPerSecond: Double) {
+    func setDriveSpeed(metersPerSecond: Double, followTraffic: Bool) {
         guard metersPerSecond > 0 else { return }
         self.metersPerSecond = metersPerSecond
+        isFollowingTraffic = followTraffic
+        lastTrafficUpdate = Date()
         publishDriveProgress()
     }
 
@@ -124,6 +147,7 @@ final class SpoofController: ObservableObject {
         stopTimer()
         target = nil
         playback = nil
+        updatedRoute = nil
         status = .working("Returning to your real location…")
         sendQueue.async {
             let result = Result { try DeviceLink.shared.clearLocation() }
@@ -216,6 +240,7 @@ final class SpoofController: ObservableObject {
         stopTimer()
         target = nil
         playback = nil
+        updatedRoute = nil
         keepAlive.stop()
         status = .failed(error.localizedDescription)
     }
@@ -257,9 +282,15 @@ final class SpoofController: ObservableObject {
         lastDriveTick = now
 
         // Hold position while the tunnel is down, so the trip doesn't jump ahead when it returns.
-        if !isPaused && !isReconnecting {
-            route.advance(by: metersPerSecond * elapsed)
+        if isPaused || isReconnecting {
+            currentSpeed = 0
+        } else {
+            let targetSpeed = isFollowingTraffic ? (route.currentTrafficSpeed ?? metersPerSecond) : metersPerSecond
+            let change = maxSpeedChange * max(elapsed, 1)
+            currentSpeed = min(max(targetSpeed, currentSpeed - change), currentSpeed + change)
+            route.advance(by: currentSpeed * elapsed)
             playback = route
+            updateTrafficIfDue(for: route)
         }
 
         send(route.coordinate) { [weak self] succeeded in
@@ -271,9 +302,43 @@ final class SpoofController: ObservableObject {
         if route.isFinished {
             stopTimer()
             playback = nil
+            updatedRoute = nil
             holdPosition(at: route.coordinate)
         } else {
             publishDriveProgress()
+        }
+    }
+
+    /// Asks for the rest of the route every few minutes, so new slowdowns change the speed.
+    /// If that fails, the drive carries on with the speeds it has.
+    private func updateTrafficIfDue(for route: RoutePlayback) {
+        guard isFollowingTraffic, route.hasTrafficSpeeds, !isUpdatingTraffic, !route.isFinished,
+              Date().timeIntervalSince(lastTrafficUpdate) >= trafficUpdateInterval
+        else { return }
+
+        isUpdatingTraffic = true
+        lastTrafficUpdate = Date()
+        let id = driveID
+        let requestedAt = route.tripDistance
+        let start = route.coordinate
+        let destination = route.destination
+
+        Task { @MainActor [weak self] in
+            let update = try? await LiveTraffic.route(from: start, to: destination)
+            guard let self else { return }
+            self.isUpdatingTraffic = false
+            guard let update, id == self.driveID, let current = self.playback,
+                  var replacement = RoutePlayback(points: update.coordinates, speeds: update.speeds, earlierDistance: requestedAt)
+            else { return }
+
+            // The drive kept moving while the request ran.
+            replacement.advance(by: current.tripDistance - requestedAt)
+            self.playback = replacement
+            self.updatedRoute = MKPolyline(coordinates: update.coordinates, count: update.coordinates.count)
+            if update.expectedTravelTime > 0, self.isFollowingTraffic {
+                self.metersPerSecond = update.distance / update.expectedTravelTime
+            }
+            self.publishDriveProgress()
         }
     }
 
@@ -285,7 +350,9 @@ final class SpoofController: ObservableObject {
             longitude: coordinate.longitude,
             fractionComplete: route.fractionComplete,
             remainingMeters: route.remaining,
-            remainingSeconds: route.remaining / metersPerSecond,
+            remainingSeconds: isFollowingTraffic ? route.secondsRemaining(fallback: metersPerSecond) : route.remaining / metersPerSecond,
+            metersPerSecond: currentSpeed,
+            isFollowingTraffic: isFollowingTraffic && route.hasTrafficSpeeds,
             isPaused: isPaused,
             isReconnecting: isReconnecting
         ))

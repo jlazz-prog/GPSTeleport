@@ -11,6 +11,8 @@ struct SetupScreen: View {
     @State private var showImporter = false
     @State private var pairingMessage: String?
     @State private var testState: TestState = .idle
+    @State private var mapboxToken = ""
+    @State private var hasMapboxToken = LiveTraffic.hasToken
 
     private enum TestState {
         case idle, running(String), passed, failed(String)
@@ -60,6 +62,31 @@ struct SetupScreen: View {
                         """)
                         .font(.caption)
                     }
+                }
+
+                Section {
+                    if hasMapboxToken {
+                        Label("Token saved on this iPhone", systemImage: "checkmark.circle.fill")
+                            .font(.footnote)
+                            .foregroundStyle(.green)
+                        Button("Remove token", role: .destructive) {
+                            MapboxToken.delete()
+                            hasMapboxToken = false
+                        }
+                    } else {
+                        SecureField("Paste your Mapbox access token", text: $mapboxToken)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                        Button("Save token") {
+                            hasMapboxToken = MapboxToken.save(mapboxToken.trimmingCharacters(in: .whitespacesAndNewlines))
+                            mapboxToken = ""
+                        }
+                        .disabled(mapboxToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                } header: {
+                    Text("Live traffic for Drive (optional)")
+                } footer: {
+                    Text("With a free token from mapbox.com, Auto speed in Drive follows real traffic on Mapbox's route. Your start and destination are sent to Mapbox when you find a route, and your position every 5 minutes during a drive. Without a token, Auto uses Apple Maps' average speed.")
                 }
 
                 Section {
